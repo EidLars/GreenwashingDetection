@@ -1,0 +1,96 @@
+# =========================================================
+# PYTHON / Pycharm / Virtualenv
+# =========================================================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+*.egg-info/
+*.egg
+build/
+develop-eggs/
+dist/
+.eggs/
+.installed.cfg
+*.manifest
+*.spec
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.conda/
+*.conda
+*.virtualenv
+
+# PyCharm project settings
+.idea/
+.vscode/
+
+# Jupyter / IPython
+.ipynb_checkpoints/
+*.ipynb_checkpoints/
+
+# =========================================================
+# ENVIRONMENT & CONFIG
+# =========================================================
+# Secrets / API Keys / Local Settings
+.env
+*.env.*
+*.ini
+config.yaml
+config.yml
+
+# =========================================================
+# LOGGING / TEMP / CACHE
+# =========================================================
+*.log
+logs/
+cache/
+__cache__/
+*.tmp
+*.bak
+*.swp
+.DS_Store
+Thumbs.db
+
+# =========================================================
+# DATA & OUTPUT (nicht versionieren!)
+# =========================================================
+# Lokale Datenquellen (Originalberichte)
+data/input/nachhaltigkeitsberichte/
+data/input/geschaeftsberichte/
+
+# Modelloutputs und Zwischenergebnisse
+data/out/
+runs/
+artifacts/
+mlruns/
+experiments/
+outputs/
+
+# Falls du später DVC oder MLflow nutzt, deren Artefakte hier ausnehmen:
+# !data/.gitkeep
+# !data/README.md
+
+# =========================================================
+# ENVIRONMENT / PACKAGE MANAGER
+# =========================================================
+# Poetry / Pipenv
+poetry.lock
+Pipfile.lock
+
+# Anaconda
+*.conda
+*.yml
+*.yaml
+
+# =========================================================
+# OS-SYSTEMDATEIEN
+# =========================================================
+.DS_Store
+desktop.ini
+Thumbs.db
+ehthumbs.db
