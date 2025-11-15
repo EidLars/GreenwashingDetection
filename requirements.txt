@@ -1,0 +1,7 @@
+torch
+transformers
+pypdf
+requests
+numpy
+pandas
+nltk

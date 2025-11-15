@@ -64,7 +64,7 @@ data/input/nachhaltigkeitsberichte/
 data/input/geschaeftsberichte/
 
 # Modelloutputs und Zwischenergebnisse
-data/out/
+data/output/
 runs/
 artifacts/
 mlruns/
