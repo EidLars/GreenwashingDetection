@@ -150,7 +150,7 @@ class ClimateBERTClaimExtractor:
         self,
         model_name: str = "climatebert/environmental-claims",
         max_length: int = 512,
-        threshold_yes: float = 0.5,
+        threshold_yes: float = 0.8,
     ) -> None:
         self.model_name = model_name
         self.max_length = max_length

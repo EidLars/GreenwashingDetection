@@ -60,6 +60,8 @@ class FinancialKPI:
     value: str
     unit: str
     context: str
+    kategorie: str | None = None       # NEU: KPI-Kategorie aus dem LLM
+    reportingyear: str | None = None   # Jahr des Ursprungsberichts (wird außerhalb gesetzt)
 
 
 class OpenRouterClient:
@@ -114,15 +116,11 @@ class OpenRouterClient:
 
 # Sinnvolle Defaults für OpenRouter Free-Tier (aus Logs ersichtlich)
 REQS_PER_MIN_DEFAULT = 16      # X-RateLimit-Limit: 16/min
-REQS_PER_DAY_DEFAULT = 50      # X-RateLimit-Limit: 50/day
 SAFETY_MARGIN = 0.90           # etwas unter Limit bleiben
 MIN_SLEEP_BETWEEN_REQ = 4.2    # ~ 60/14 ≈ 4.2s (unter 16/min bleiben)
 
 # Anzahl Chunks pro Batch: konservativ halten (Free-Modelle)
 BATCH_SIZE = 8
-
-# Pro Lauf: harte Obergrenze an API-Calls, um daily limit sicher zu meiden
-MAX_CALLS_PER_RUN = int(REQS_PER_DAY_DEFAULT * SAFETY_MARGIN)  # ~45
 
 
 def _strip_code_fences(s: str) -> str:
@@ -179,6 +177,15 @@ def _parse_json_lenient(raw: str) -> Optional[list]:
     return None
 
 
+def _contains_numbers(text: str) -> bool:
+    """
+    Prüft heuristisch, ob ein Textabschnitt numerische Zeichen enthält.
+    Wird als Vorfilter genutzt, um nur potenziell KPI-relevante Chunks
+    an die API zu senden.
+    """
+    return bool(re.search(r"\d", text))
+
+
 def _respect_minute_budget(last_call_ts: list, per_min_limit: int = REQS_PER_MIN_DEFAULT) -> None:
     """
     Erzwingt Pacing zwischen Requests, sodass wir unter dem pro-Minuten-Limit bleiben.
@@ -226,8 +233,9 @@ def _complete_with_retries(client: OpenRouterClient, messages: List[dict],
 def extract_financial_kpis(chunks: Iterable[str]) -> List[FinancialKPI]:
     """
     Extrahiert finanzielle Kennzahlen abschnittsweise:
+    - Numerischer Vorfilter: nur Chunks mit mindestens einer Ziffer werden betrachtet
     - Batching von Chunks (BATCH_SIZE)
-    - Pacing unterhalb der Free-Tier-Limits (REQS_PER_MIN/REQS_PER_DAY)
+    - Pacing unterhalb der Free-Tier-Limits (REQS_PER_MIN)
     - Exponentielles Backoff bei 429/5xx
     - Tolerantes JSON-Parsing
     - Inkrementelle Aggregation
@@ -235,32 +243,50 @@ def extract_financial_kpis(chunks: Iterable[str]) -> List[FinancialKPI]:
     client = OpenRouterClient()
     all_kpis: List[FinancialKPI] = []
 
-    chunk_list = list(chunks)
-    n = len(chunk_list)
-    LOGGER.info("Starte KPI-Extraktion für %d Textabschnitte", n)
+    # Ursprüngliche Chunk-Liste materialisieren
+    original_chunks = list(chunks)
 
-    calls_used = 0
+    # Numerischer Vorfilter: Chunks ohne Ziffern werden nicht an die API gesendet
+    chunk_list = [c for c in original_chunks if _contains_numbers(c)]
+    filtered_out = len(original_chunks) - len(chunk_list)
+
+    LOGGER.info(
+        "Numerischer Vorfilter aktiv: %d von %d Chunks enthalten mindestens eine Ziffer; "
+        "%d Chunks werden übersprungen.",
+        len(chunk_list),
+        len(original_chunks),
+        filtered_out,
+    )
+
+    n = len(chunk_list)
+    LOGGER.info("Starte KPI-Extraktion für %d vorgefilterte Textabschnitte", n)
+
+    # Falls nach Filterung keine Chunks übrig bleiben, können wir direkt abbrechen
+    if n == 0:
+        LOGGER.info("Keine Chunks mit numerischen Inhalten gefunden – keine KPI-Extraktion durchgeführt.")
+        return all_kpis
+
     last_call_ts = [None]  # mutable Timestamp für Pacing
 
     for i in range(0, n, BATCH_SIZE):
-        if calls_used >= MAX_CALLS_PER_RUN:
-            LOGGER.warning("Tagesbudget erreicht (~%d Calls). Breche Lauf kontrolliert ab.", MAX_CALLS_PER_RUN)
-            break
-
         batch = chunk_list[i : i + BATCH_SIZE]
         batch_text = "\n\n".join(batch)
 
         LOGGER.info("Sende Batch %d–%d an OpenRouter", i + 1, min(i + BATCH_SIZE, n))
 
         messages = [
-            {"role": "system", "content": prompts.KPI_EXTRACTION_PROMPT},
+            {
+                "role": "system",
+                "content": prompts.KPI_EXTRACTION_PROMPT,
+            },
             {
                 "role": "user",
                 "content": (
-                    "Analysiere den folgenden Abschnitt eines Geschäftsberichts und extrahiere "
-                    "alle finanziellen Kennzahlen als JSON-Liste mit Objekten der Form "
-                    '{"kpi": "...", "wert": ..., "einheit": "...", "kontext": "..."}. '
-                    "Wenn keine relevanten Kennzahlen vorkommen, gib [] zurück.\n\n"
+                    "Analysiere den folgenden Abschnitt eines Geschäftsberichts strikt gemäß den "
+                    "obigen Anweisungen. Extrahiere alle relevanten Kennzahlen und gib sie als "
+                    "JSON-Liste mit Objekten der Form "
+                    '{"kpi": "...", "wert": ..., "einheit": "...", "kontext": "...", "kategorie": "..."} '
+                    "zurück. Wenn keine relevanten Kennzahlen vorkommen, gib [] zurück.\n\n"
                     f"{batch_text}"
                 ),
             },
@@ -271,7 +297,6 @@ def extract_financial_kpis(chunks: Iterable[str]) -> List[FinancialKPI]:
 
         try:
             raw_response = _complete_with_retries(client, messages, max_retries=5)
-            calls_used += 1
         except RuntimeError as exc:
             LOGGER.error("KPI-Extraktion für Batch %d abgebrochen: %s", i, exc)
             continue
@@ -283,14 +308,26 @@ def extract_financial_kpis(chunks: Iterable[str]) -> List[FinancialKPI]:
             continue
 
         # Normalisierung & Sammeln
+        # Normalisierung & Sammeln
         for entry in parsed:
             k = (entry.get("kpi", "") or "").strip()
             v = (str(entry.get("wert", "")) or "").strip()
             u = (entry.get("einheit", "") or "").strip()
             c = (entry.get("kontext", "") or "").strip()
+            cat = (entry.get("kategorie", "") or "").strip()
+
             if not k:
                 continue
-            all_kpis.append(FinancialKPI(kpi=k, value=v, unit=u, context=c))
+
+            all_kpis.append(
+                FinancialKPI(
+                    kpi=k,
+                    value=v,
+                    unit=u,
+                    context=c,
+                    kategorie=cat or None,
+                )
+            )
 
         LOGGER.info("Batch %d verarbeitet – kumuliert %d KPIs",
                     (i // BATCH_SIZE) + 1, len(all_kpis))

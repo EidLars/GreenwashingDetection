@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Iterable, List
 
 import pdfplumber
-
+import re
 from typing import List
 import nltk
 from nltk.tokenize import sent_tokenize
@@ -38,14 +38,62 @@ def extract_text_from_pdfs(pdf_paths: Iterable[Path]) -> str:
             LOGGER.error("Failed to parse %s: %s", path, exc)
     return "\n".join(texts)
 
-
 def clean_text(text: str) -> str:
-    """Perform lightweight cleaning to ease downstream processing."""
+    """Perform enhanced cleaning to ease downstream processing.
+
+    - Normalisiert Leerzeichen
+    - Entfernt typische Bullet-/Icon-Symbole (z.B. , •)
+    - Führt Zeilen zusammen, wenn sie wahrscheinlich zu einem Satz gehören
+    """
 
     if not text:
         return ""
+
+    # 1) Grundnormalisierung: NBSP -> Space
     cleaned = text.replace("\u00a0", " ")
-    cleaned = "\n".join(line.strip() for line in cleaned.splitlines() if line.strip())
+
+    # 2) Typische Bullet-/Icon-Symbole entfernen
+    #    (Liste bei Bedarf erweitern, je nach PDFs)
+    cleaned = re.sub(r"[•●■▪◦▶►▸▹]", " ", cleaned)
+
+    # 3) Zeilenbasis: Trim + leere Zeilen entfernen
+    lines = [line.strip() for line in cleaned.splitlines() if line.strip()]
+
+    merged_lines = []
+    buffer = ""
+
+    # Heuristik:
+    # - Wenn eine Zeile nicht mit Satzzeichen (.?!:) endet,
+    #   wird sie mit der nächsten Zeile verbunden (sofern diese nicht wie eine Überschrift in GROSSBUCHSTABEN aussieht).
+    heading_pattern = re.compile(r"^[A-Z][A-Z0-9\s\-\&]{3,}$")
+
+    for line in lines:
+        if not buffer:
+            buffer = line
+            continue
+
+        # Prüfe, ob buffer wahrscheinlich ein vollständiger Satz/Absatz ist
+        ends_with_punct = bool(re.search(r"[\.!?;:]$", buffer))
+
+        # Prüfe, ob aktuelle Zeile eher eine Überschrift in Capitals ist
+        looks_like_heading = bool(heading_pattern.match(line))
+
+        if not ends_with_punct and not looks_like_heading:
+            # Wir hängen die aktuelle Zeile an den vorherigen Buffer an
+            buffer = buffer + " " + line
+        else:
+            # buffer ist abgeschlossen, wir starten eine neue Einheit
+            merged_lines.append(buffer)
+            buffer = line
+
+    if buffer:
+        merged_lines.append(buffer)
+
+    # 4) Finale Normalisierung der Whitespaces
+    cleaned = "\n".join(merged_lines)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    cleaned = "\n".join(line.strip() for line in cleaned.split("\n") if line.strip())
+
     return cleaned
 
 
