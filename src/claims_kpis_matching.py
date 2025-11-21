@@ -1,4 +1,4 @@
-# src/matching.py
+"""Matching der Claims mit den KPIs"""
 
 from __future__ import annotations
 
@@ -68,7 +68,7 @@ def convert_to_claims(c_entries: Iterable[Union[Claim, object]]) -> List[Claim]:
 
 
 # ---------------------------------------------------------------------------
-# Matching: Claim-Cluster -> KPI-Subset
+# Matching: Claim-Cluster mit KPI-Subset
 # ---------------------------------------------------------------------------
 
 def match_kpis_to_cluster(
@@ -97,7 +97,7 @@ def match_kpis_to_cluster(
         if getattr(k, "kategorie", None) in allowed_categories
     ]
 
-    # einfache Priorisierung: Emissions-/Energiekategorien vor anderen
+    # Priorisierung: Emissions-/Energiekategorien vor anderen
     def _priority(k: FinancialKPI) -> int:
         cat = getattr(k, "kategorie", "") or ""
         if cat.startswith("emissions_") or cat == "emission_intensity":
@@ -153,7 +153,7 @@ def build_batches_for_claim_file(
 
     Die batch_id zählt innerhalb dieses Reports von 0 aufwärts.
     """
-    # 1) Claims normalisieren
+    # Schritt 1: Claims normalisieren
     claims = convert_to_claims(c_entries)
     if not claims:
         LOGGER.warning(
@@ -163,7 +163,7 @@ def build_batches_for_claim_file(
         )
         return None
 
-    # 2) Clustering + Topics
+    # Schritt 2: Clustering + Topics
     eff_n_clusters = min(n_clusters, len(claims))
     if eff_n_clusters <= 0:
         LOGGER.warning(
@@ -180,7 +180,7 @@ def build_batches_for_claim_file(
     clusters: List[ClaimCluster] = clusterer.cluster_claims(claims)
     assign_topics_to_clusters(clusters, top_n=3)
 
-    # 3) Batches über alle Cluster
+    # Schritt 3: Batches über alle Cluster
     batches: List[Dict[str, Any]] = []
     batch_counter = 0
 

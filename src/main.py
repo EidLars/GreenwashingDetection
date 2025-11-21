@@ -1,4 +1,4 @@
-"""Command line entry point for the greenwashing detection prototype."""
+"""Kommandozeileneinstieg für den Greenwashing-Detection-Prototyp."""
 
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ def _load_saved_claims(claims_output_dir: Path) -> Dict[str, List[object]]:
 
 
 def _load_saved_kpis(kpi_output_dir: Path) -> Dict[str, List[FinancialKPI]]:
-    """Load stored KPI results to support isolated evaluations."""
+    """Lädt gespeicherte KPI-Ergebnisse, um Einzelbewertungen zu ermöglichen."""
 
     kpis_per_report: Dict[str, List[FinancialKPI]] = {}
     for json_path in sorted(kpi_output_dir.glob("*.json")):
@@ -86,7 +86,7 @@ def _load_saved_kpis(kpi_output_dir: Path) -> Dict[str, List[FinancialKPI]]:
 
 
 def _load_saved_evaluations(results_output_dir: Path) -> Dict[str, Dict[str, object]]:
-    """Return previously stored evaluation outputs."""
+    """Liest vorhandene Evaluationsausgaben ein."""
 
     evaluations: Dict[str, Dict[str, object]] = {}
     for json_path in sorted(results_output_dir.glob("*.json")):
@@ -156,7 +156,7 @@ def run_matching_batches(
     matching_output_dir = output_root / "matching"
     matching_output_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1) Claims und KPIs laden
+    # Schritt 1: Claims und KPIs laden
     claims_per_report = _load_saved_claims(claims_output_dir)
     kpis_per_report = _load_saved_kpis(kpi_output_dir)
 
@@ -165,7 +165,7 @@ def run_matching_batches(
     if not kpis_per_report:
         LOGGER.warning("Keine gespeicherten KPIs gefunden unter %s", kpi_output_dir)
 
-    # Firmenpräfix-Logik (company_key)
+    # Firmenpräfix-Logik (company_key) vorbereiten
     _TOKENS = [
         "annual", "sustainability", "csr", "esg",
         "report", "bericht", "nachhaltigkeitsbericht", "geschaeftsbericht",
@@ -173,7 +173,7 @@ def run_matching_batches(
     ]
     _YEAR_RE = re.compile(r"\b(19\d{2}|20\d{2})\b")
 
-    # Claims gruppieren
+    # Claims nach company_key gruppieren
     claims_by_key: Dict[str, Dict[str, List[object]]] = {}
     for c_stem, c_entries in claims_per_report.items():
         s = c_stem.lower()
@@ -189,7 +189,7 @@ def run_matching_batches(
         key = re.sub(r"\s+", " ", key)
         claims_by_key.setdefault(key, {})[c_stem] = c_entries
 
-    # KPIs gruppieren
+    # KPIs nach company_key gruppieren
     kpis_by_key: Dict[str, Dict[str, List[FinancialKPI]]] = {}
     for k_stem, k_entries in kpis_per_report.items():
         s = k_stem.lower()
@@ -205,7 +205,7 @@ def run_matching_batches(
         key = re.sub(r"\s+", " ", key)
         kpis_by_key.setdefault(key, {})[k_stem] = k_entries
 
-    # Embedder einmalig initialisieren und an save_batches_for_claim_file weitergeben
+    # Embedder einmalig initialisieren und an save_batches_for_claim_file weiterreichen
     embedder = ClaimEmbedder(
         model_name="sentence-transformers/all-MiniLM-L6-v2"
     )
@@ -216,7 +216,7 @@ def run_matching_batches(
         "no_batches_created": [],
     }
 
-    # 2) Für jede company_key-Gruppe Matching-Dateien erzeugen
+    # Schritt 2: Für jede company_key-Gruppe Matching-Dateien erzeugen
     for key, claim_files in claims_by_key.items():
         kpi_files = kpis_by_key.get(key, {})
         if not kpi_files:
@@ -254,14 +254,14 @@ def run_matching_batches(
     if return_result:
         return summary
 
-    # Standard: Kompakte Übersicht ausgeben
+    # Standardausgabe: kompakte Übersicht anzeigen
     print("\n=== MATCHING-ZUSAMMENFASSUNG ===")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return None
 
 
 def run_pipeline(input_dir: Path, steps: Iterable[str] | None = None) -> Dict[str, object]:
-    """Run the selected pipeline steps for the given input directory.
+    """Führt die gewählten Pipeline-Schritte für das Eingabeverzeichnis aus.
 
     Unterstützte Schritte:
       - "claims":     Claim-Extraktion aus Nachhaltigkeitsberichten
@@ -272,7 +272,7 @@ def run_pipeline(input_dir: Path, steps: Iterable[str] | None = None) -> Dict[st
     """
 
     # -------------------------------------------------------------
-    # 0) Schrittkonfiguration
+    # Schritt 0: Ausgewählte Pipeline-Schritte bestimmen
     # -------------------------------------------------------------
     selected_steps: Set[str] = set(steps or {"claims", "kpis", "matching", "evaluation"})
     if "all" in selected_steps:
@@ -291,7 +291,7 @@ def run_pipeline(input_dir: Path, steps: Iterable[str] | None = None) -> Dict[st
         folder.mkdir(parents=True, exist_ok=True)
 
     # -------------------------------------------------------------
-    # 1) Claim-Extraktion
+    # Schritt 1: Claim-Extraktion
     # -------------------------------------------------------------
     claims_per_report: Dict[str, List[Claim]] = {}
     if "claims" in selected_steps:
@@ -315,7 +315,7 @@ def run_pipeline(input_dir: Path, steps: Iterable[str] | None = None) -> Dict[st
         claims_per_report = _load_saved_claims(claims_output_dir)
 
     # -------------------------------------------------------------
-    # 2) KPI-Extraktion
+    # Schritt 2: KPI-Extraktion
     # -------------------------------------------------------------
     kpis_per_report: Dict[str, List[FinancialKPI]] = {}
     if "kpis" in selected_steps:
@@ -325,7 +325,7 @@ def run_pipeline(input_dir: Path, steps: Iterable[str] | None = None) -> Dict[st
             chunks = load_and_prepare_report(report_path)
             kpis = extract_financial_kpis(chunks)
 
-            # Jahr aus Ursprungs-PDF bestimmen (hinterste 4 Ziffern im Dateinamen)
+            # Berichtsjahr aus dem Dateinamen lesen (hinterste vier Ziffern)
             reporting_year = _extract_reporting_year_from_path(report_path)
             if reporting_year is None:
                 LOGGER.warning(
@@ -333,13 +333,13 @@ def run_pipeline(input_dir: Path, steps: Iterable[str] | None = None) -> Dict[st
                     report_path.name,
                 )
 
-            # Jahr an jede KPI hängen
+            # Berichtsjahr an jede KPI hängen
             for kpi in kpis:
                 kpi.reportingyear = reporting_year
 
             kpis_per_report[report_path.stem] = kpis
 
-            # JSON-Ausgabe inkl. reportingyear
+            # JSON-Ausgabe inklusive reportingyear schreiben
             kpi_output = [asdict(kpi) for kpi in kpis]
             output_path = kpi_output_dir / f"{report_path.stem}.json"
             output_path.write_text(
@@ -352,7 +352,7 @@ def run_pipeline(input_dir: Path, steps: Iterable[str] | None = None) -> Dict[st
         kpis_per_report = _load_saved_kpis(kpi_output_dir)
 
     # -------------------------------------------------------------
-    # 3) Matching-Schritt (Claims-Cluster + KPI-Subset → Matching-JSONs)
+    # Schritt 3: Matching-Schritt (Claims-Cluster + KPI-Subset wird Matching-JSONs)
     # -------------------------------------------------------------
     matching_summary: Dict[str, object] | None = None
     if "matching" in selected_steps or "evaluation" in selected_steps:
@@ -360,7 +360,7 @@ def run_pipeline(input_dir: Path, steps: Iterable[str] | None = None) -> Dict[st
         matching_summary = run_matching_batches(input_dir=input_dir, return_result=True)
 
     # -------------------------------------------------------------
-    # 4) LLM-basierte Evaluation auf Basis der Matching-Dateien
+    # Schritt 4: LLM-basierte Evaluation auf Basis der Matching-Dateien
     # -------------------------------------------------------------
     evaluations: Dict[str, Dict[str, object]] = {}
 
@@ -386,15 +386,15 @@ def run_pipeline(input_dir: Path, steps: Iterable[str] | None = None) -> Dict[st
                 claims_file,
             )
 
-            # Batch für Batch mit dem LLM auswerten
+            # Jeden Batch mit dem LLM auswerten
             batch_results = analyse_matching_file(matching_path)
 
-            # Evaluationsobjekt mit Header + Results
+            # Evaluationsobjekt aus Header und Results zusammensetzen
             evaluation_obj = {
                 "company_key": company_key,
                 "claims_file": claims_file,
                 "kpi_files": kpi_files,
-                "results": batch_results,  # Liste von {claim, kpi, relation, rationale}
+                "results": batch_results,  # Liste aus {claim, kpi, relation, rationale}
             }
 
             out_stem = f"{matching_path.stem}__evaluated"
@@ -417,7 +417,7 @@ def run_pipeline(input_dir: Path, steps: Iterable[str] | None = None) -> Dict[st
         evaluations = _load_saved_evaluations(results_output_dir)
 
     # -------------------------------------------------------------
-    # 5) Zusammenfassendes Pipeline-Resultat
+    # Schritt 5: Zusammenfassendes Pipeline-Resultat
     # -------------------------------------------------------------
     return {
         "claims": {stem: len(entries) for stem, entries in claims_per_report.items()},
@@ -443,7 +443,7 @@ def parse_args() -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(description=__doc__)
 
-    # Eingabeverzeichnis
+    # Eingabeverzeichnis definieren
     parser.add_argument(
         "--input-dir",
         type=Path,
@@ -451,7 +451,7 @@ def parse_args() -> argparse.Namespace:
         help="Pfad zum Eingabeverzeichnis mit PDF-Berichten.",
     )
 
-    # Generisches Steps-Interface
+    # Steps-Interface zur Auswahl der Pipeline-Schritte
     parser.add_argument(
         "--steps",
         nargs="+",
@@ -463,7 +463,7 @@ def parse_args() -> argparse.Namespace:
         ),
     )
 
-    # Optionaler Ausgabeort
+    # Optionalen Ausgabeort für die Pipeline-Ergebnisse definieren
     parser.add_argument(
         "--output",
         type=Path,
@@ -558,7 +558,7 @@ def quick_test_claims_clustering(
         claims_output_dir,
     )
 
-    # 1) Claims aus JSON als Claim-Dataclasses laden
+    # Schritt 1: Claims aus JSON als Claim-Dataclasses laden
     claims_per_report: Dict[str, List[Claim]] = {}
     for json_path in sorted(claims_output_dir.glob("*.json")):
         try:
@@ -588,14 +588,14 @@ def quick_test_claims_clustering(
         LOGGER.warning("Keine Claims-JSONs gefunden – Abbruch.")
         return None
 
-    # 2) Embedder einmal initialisieren
+    # Schritt 2: Embedder einmal initialisieren
     embedder = ClaimEmbedder(
         model_name="sentence-transformers/all-MiniLM-L6-v2"
     )
 
     results: Dict[str, object] = {}
 
-    # 3) Pro Report: Claims clustern und Topics zuweisen
+    # Schritt 3: Pro Report: Claims clustern und Topics zuweisen
     for stem, claims in claims_per_report.items():
         LOGGER.info("Clustere Claims für Report '%s' (%d Claims)", stem, len(claims))
 
@@ -661,9 +661,12 @@ def quick_test_matching(
 
 def random_claims_for_evaluation():
     """
-            Lädt einen festen PDF-Bericht, extrahiert Chunks,
-            klassifiziert alle Sätze (YES/NO) und gibt 10 zufällige Claims aus.
-            """
+    Hilfsfunktion für manuelle Stichproben:
+    - lädt einen festen PDF-Bericht,
+    - extrahiert Text-Chunks,
+    - klassifiziert alle Sätze (YES/NO) und
+    - gibt 10 zufällige Claims in der Konsole aus.
+    """
     from src.preprocessing import load_and_prepare_report
     from src.claims_extraction import sample_yes_no_claims_from_chunks
 
@@ -673,10 +676,10 @@ def random_claims_for_evaluation():
 
     print(f"Nutze PDF: {pdf_path}")
 
-    # Text vorbereiten
+    # Text vorbereiten und anschließend stichprobenartig Claims ziehen
     chunks = load_and_prepare_report(pdf_path)
 
-    # YES+NO Claims, 10 zufällig
+    # YES- und NO-Claims klassifizieren und 10 zufällige Einträge zurückgeben
     claims = sample_yes_no_claims_from_chunks(chunks, n_samples=10)
 
 def main() -> None:

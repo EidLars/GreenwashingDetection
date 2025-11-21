@@ -1,4 +1,4 @@
-"""Greenwashing evaluation using the OpenRouter LLM."""
+"""Bewertet Claim-KPI-Zusammenhänge mithilfe des OpenRouter-LLM."""
 
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ def _parse_json_lenient_object(raw: str) -> Optional[Any]:
 
 
 # ---------------------------------------------------------------------------
-# Alte Evaluation (Claims + KPIs direkt) – optional weiter nutzbar
+# Alte Evaluation (Claims + KPIs direkt)
 # ---------------------------------------------------------------------------
 
 def analyse_greenwashing(claims: Iterable[object], kpis: Iterable[FinancialKPI]) -> Dict[str, object]:
@@ -79,7 +79,7 @@ def analyse_greenwashing(claims: Iterable[object], kpis: Iterable[FinancialKPI])
 
     client = OpenRouterClient()
 
-    # Claims in strukturiertes JSON überführen: text + p_yes (falls vorhanden)
+    # Claims in strukturiertes JSON überführen: text + p_yes
     claims_list = []
     for c in claims:
         text = getattr(c, "text", None)

@@ -1,4 +1,4 @@
-"""Centralised prompt templates for the OpenRouter LLM calls."""
+"""Zentrale Prompt-Vorlagen für Aufrufe des OpenRouter-LLM."""
 
 KPI_EXTRACTION_PROMPT = (
     "Analysiere den folgenden Textauszug aus einem Geschäftsbericht und extrahiere "

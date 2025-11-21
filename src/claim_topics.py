@@ -1,4 +1,4 @@
-# src/claim_topics.py
+"""Vordefinierte Claim Themen"""
 
 from __future__ import annotations
 
@@ -9,8 +9,6 @@ import re
 from src.claims_clustering import ClaimCluster
 
 
-# Einfache, regelbasierte Zuordnung von Themen anhand von Keywords.
-# Diese Liste kannst du später verfeinern/erweitern.
 CLAIM_TOPIC_KEYWORDS: Dict[str, List[str]] = {
     # ---------------------------------------
     # KLIMA / EMISSIONEN / ENERGIE

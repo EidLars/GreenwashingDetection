@@ -1,4 +1,4 @@
-# src/claim_clustering.py
+"""Clustert inhaltlich verwandte Claims über Sentence-Embeddings."""
 
 from __future__ import annotations
 
@@ -66,15 +66,15 @@ class ClaimEmbedder:
             ).to(self.device)
 
             outputs = self.model(**inputs)
-            # last_hidden_state: (batch, seq_len, hidden_dim)
+            # last_hidden_state hat Form (batch, seq_len, hidden_dim)
             last_hidden = outputs.last_hidden_state
 
-            attention_mask = inputs["attention_mask"].unsqueeze(-1).float()  # (batch, seq_len, 1)
-            masked = last_hidden * attention_mask                               # Maskierung der Padding-Tokens
+            attention_mask = inputs["attention_mask"].unsqueeze(-1).float()     # (batch, seq_len, 1)
+            masked = last_hidden * attention_mask                               # Padding-Tokens ausblenden
 
             sum_embeddings = masked.sum(dim=1)                                  # (batch, hidden_dim)
             lengths = attention_mask.sum(dim=1)                                 # (batch, 1)
-            mean_embeddings = sum_embeddings / torch.clamp(lengths, min=1e-9)   # Mean-Pooling
+            mean_embeddings = sum_embeddings / torch.clamp(lengths, min=1e-9)   # Stabiler Mittelwert über Tokens
 
             all_embeddings.append(mean_embeddings.cpu().numpy())
 
@@ -109,9 +109,9 @@ class ClaimClusterer:
             return []
 
         sentences = [c.sentence for c in claims]
-        embeddings = self.embedder.encode(sentences)  # shape: (n_claims, dim)
+        embeddings = self.embedder.encode(sentences)  #Embedding-Matrix mit Form (n_claims, dim)
 
-        # Sicherheitsfall: weniger Claims als Clusterzahl
+        # Sicherheit: K-Means darf nicht mehr Cluster als Claims erhalten
         n_clusters = min(self.n_clusters, embeddings.shape[0])
 
         kmeans = KMeans(

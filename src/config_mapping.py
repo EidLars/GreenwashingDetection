@@ -11,95 +11,95 @@ CLAIM_TO_KPI_CATEGORY_MAP = {
     "energy": [
         "energy_consumption",
         "emission_intensity",
-        "operational_costs",   # energiebezogene Kosten
-        "capex_opex",          # energiebezogene Investitionen
+        "operational_costs",
+        "capex_opex",
     ],
     "transition": [
-        "capex_opex",          # Transformations-/Transition-Investitionen
-        "revenue_profit",      # Verschiebung der Geschäftssegmente im Umsatz/Gewinn
-        "cashflow",            # Free Cashflow / Operating Cashflow unter Transition-Strategie
+        "capex_opex",
+        "revenue_profit",
+        "cashflow",
     ],
 
     # ---------------------------------------------------------------
     # SOZIALES / MENSCHEN / LIEFERKETTE
     # ---------------------------------------------------------------
     "social": [
-        "operational_costs",   # z.B. Personalaufwand, Sozialprogramme
+        "operational_costs",
     ],
     "human_rights_supply_chain": [
-        "operational_costs",   # Audit-, Monitoring-, Compliance-Kosten in Lieferketten
+        "operational_costs",
     ],
     "health_safety": [
-        "operational_costs",   # H&S-Kosten, Schutzmaßnahmen, Trainings
+        "operational_costs",
     ],
     "diversity_inclusion": [
-        "operational_costs",   # Programme, Trainings, DEI-Initiativen
+        "operational_costs",
     ],
     "human_capital": [
-        "operational_costs",   # Personal-, Schulungs- und Entwicklungskosten
+        "operational_costs",
     ],
 
     # ---------------------------------------------------------------
     # GOVERNANCE / ETHIK / COMPLIANCE / STEUERN
     # ---------------------------------------------------------------
     "governance": [
-        "capital_structure",   # Verschuldung, Eigenkapital etc.
-        "revenue_profit",      # Governance-Effekte auf Profitabilität
-        "cashflow",            # Governance-Effekte auf Cash Generierung
+        "capital_structure",
+        "revenue_profit",
+        "cashflow",
     ],
     "ethics_compliance": [
-        "operational_costs",   # Compliance-Kosten
-        "revenue_profit",      # potenziell Bußgelder, Strafen im Ergebnis
+        "operational_costs",
+        "revenue_profit",
     ],
     "data_privacy_cybersecurity": [
-        "capex_opex",          # IT-/Cybersecurity-Investitionen
-        "operational_costs",   # laufende Sicherheits-/Datenschutzkosten
+        "capex_opex",
+        "operational_costs",
     ],
     "tax_transparency": [
-        "revenue_profit",      # Steueraufwand im Gewinn- und Verlustkonto
-        "cashflow",            # Steuerzahlungen im Cashflow
+        "revenue_profit",
+        "cashflow",
     ],
 
     # ---------------------------------------------------------------
     # UMWELT: ABFALL / WASSER / BIODIVERSITÄT / VERSCHMUTZUNG
     # ---------------------------------------------------------------
     "waste_circularity": [
-        "operational_costs",   # Entsorgungs-, Recycling-, Kreislaufkosten
-        "capex_opex",          # Investitionen in Kreislauf-/Recyclinganlagen
+        "operational_costs",
+        "capex_opex",
     ],
     "water": [
-        "operational_costs",   # Wasserbezogene Betriebskosten, Aufbereitung
-        "capex_opex",          # Investitionen in Wasserinfrastruktur
+        "operational_costs",
+        "capex_opex",
     ],
     "biodiversity": [
-        "capex_opex",          # Biodiversitätsprogramme, Renaturierungsinvestitionen
+        "capex_opex",
     ],
     "pollution_air_soil": [
-        "operational_costs",   # Luft-/Boden-/Lärmschutzmaßnahmen
-        "capex_opex",          # Investitionen in Filter, Anlagen, Schutztechnik
+        "operational_costs",
+        "capex_opex",
     ],
 
     # ---------------------------------------------------------------
     # PRODUKTE / KUNDEN / INNOVATION
     # ---------------------------------------------------------------
     "product_responsibility": [
-        "operational_costs",   # Qualitäts-, Sicherheits-, Rückrufkosten
-        "revenue_profit",      # Auswirkungen auf Umsatz und Marge (z.B. durch Rückrufe)
+        "operational_costs",
+        "revenue_profit",
     ],
     "customer": [
-        "revenue_profit",      # Umsatz, Wiederholungskäufe, Kundenzufriedenheit
-        "cashflow",            # Zahlungsströme aus Kundenbeziehungen
+        "revenue_profit",
+        "cashflow",
     ],
     "innovation_digitalization": [
-        "capex_opex",          # F&E-, Digitalisierungs-, Technologieinvestitionen
-        "operational_costs",   # laufende digitale Betriebs-/Lizenzkosten
+        "capex_opex",
+        "operational_costs",
     ],
 
     # ---------------------------------------------------------------
     # COMMUNITY / ENGAGEMENT / SPENDEN
     # ---------------------------------------------------------------
     "community": [
-        "operational_costs",   # Spenden, Sponsoring, Community-Programme
-        "cashflow",            # ggf. Mittelabflüsse aus Community-Investitionen
+        "operational_costs",
+        "cashflow",
     ],
 }

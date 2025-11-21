@@ -1,15 +1,15 @@
-# src/claims_extraction.py
+"""Extrahiert und klassifiziert Claims aus vorverarbeiteten Text-Chunks."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple
+from typing import List, Tuple
 import random
 import sys
 
 from tqdm import tqdm
 
-# HF Transformers / Torch
+#Modelle und Tokenizer aus Hugging Face
 import torch
 from transformers import (
     AutoTokenizer,
@@ -18,14 +18,13 @@ from transformers import (
 )
 from transformers.pipelines.pt_utils import KeyDataset
 
-# Zentrales Preprocessing (extern):
-# Erwartet wird eine Funktion, die aus vorverarbeiteten Chunks Satz-Strings erzeugt.
-# Siehe Anpassung in src/preprocessing.py unten.
+# Zentrales Preprocessing (extern): erwartet eine Funktion, die aus vorverarbeiteten
+# Chunks Satz-Strings erzeugt (siehe src/preprocessing.py).
 from src.preprocessing import sentences_from_chunks
 
 
 # ---------------------------------------------------------------------
-# Öffentliche Datenstruktur (JSON-Schlüssel UNVERÄNDERT)
+# Öffentliche Datenstruktur
 # ---------------------------------------------------------------------
 
 @dataclass
@@ -33,12 +32,12 @@ class Claim:
     sentence: str
     p_yes: float
     p_no: float
-    label: str  # "YES" oder "NO"
+    label: str  #Kennzeichnung als "YES" oder "NO"
 
 
 # ---------------------------------------------------------------------
-# Interne Hilfsfunktionen: 1:1 aus funktionierender Datei übernommen
-# (ohne PDF-/Tokenizer-Download-Outputs zu verändern)
+# Interne Hilfsfunktionen: unveränderte, validierte Logik aus Vorgängerversion
+# (PDF-/Tokenizer-Downloads bleiben unverändert)
 # ---------------------------------------------------------------------
 
 def _infer_labels(model: AutoModelForSequenceClassification) -> Tuple[str, str]:
@@ -59,7 +58,6 @@ def _infer_labels(model: AutoModelForSequenceClassification) -> Tuple[str, str]:
         lower = [s.lower() for s in labels]
         if "yes" in lower and "no" in lower:
             return labels[lower.index("yes")], labels[lower.index("no")]
-        # Häufig: LABEL_0/1; zweite Klasse als positiv
         return labels[1], labels[0]
 
     # Generischer Fallback
@@ -83,10 +81,7 @@ def _build_pipeline(model_name: str, max_length: int) -> Tuple[TextClassificatio
 
 
 def _predict_probs(sentences: List[str], pipe: TextClassificationPipeline, pos_label: str, neg_label: str) -> List[Tuple[float, float]]:
-    """
-    Führt die Klassifikation durch und liefert (p_yes, p_no) pro Satz.
-    Genau EIN tqdm-Fortschrittsbalken auf stdout.
-    """
+    """Führt die Klassifikation aus und liefert (p_yes, p_no) pro Satz."""
     if not sentences:
         return []
 
@@ -127,7 +122,7 @@ def _predict_probs(sentences: List[str], pipe: TextClassificationPipeline, pos_l
                 p_no = score
                 p_yes = 1.0 - score
 
-        # Binär normalisieren (robust)
+        # Binär normalisieren, falls die Summe numerisch leicht abweicht
         if abs((p_yes + p_no) - 1.0) > 1e-3:
             p_no = max(0.0, min(1.0, 1.0 - p_yes))
 
@@ -159,24 +154,26 @@ class ClimateBERTClaimExtractor:
 
     def extract(self, chunks: List[str]) -> List[Claim]:
         """
-        Erwartet vorverarbeitete Text-Chunks (externes Preprocessing).
+        Erwartet vorverarbeitete Text-Chunks (externes Preprocessing) und führt
+        anschließend vier Schritte aus:
         1) Satzsegmentierung über src.preprocessing.sentences_from_chunks(...)
         2) Klassifikation mit Softmax (p_yes, p_no)
         3) Label-Zuweisung: YES, wenn p_yes >= threshold_yes; sonst NO
         4) Rückgabe als List[Claim] (JSON-kompatibel via asdict)
         """
-        # 1) Sätze (externes Preprocessing)
+        #Schritt 1: Sätze aus den Chunks extrahieren
         sentences: List[str] = sentences_from_chunks(chunks, language="english")
 
-        # 2) Klassifikation
+        # Schritt 2: Klassifikation durchführen
         probs: List[Tuple[float, float]] = _predict_probs(sentences, self._pipe, self._pos_label, self._neg_label)
 
-        # 3) Records -> Claims (JSON-Schlüssel unverändert)
+        # Schritt 3: Records in Claim-Objekte umwandeln
         claims: List[Claim] = []
         pos_upper = self._pos_label.upper()
         neg_upper = self._neg_label.upper()
         for s, (p_yes, p_no) in zip(sentences, probs):
             label = pos_upper if p_yes >= self.threshold_yes else neg_upper
+            # Nur Claims mit ausreichend hoher YES-Wahrscheinlichkeit werden zurückgegeben
             if p_yes >= self.threshold_yes:
                 claims.append(Claim(sentence=s, p_yes=float(p_yes), p_no=float(p_no), label=label))
         return claims
@@ -197,18 +194,18 @@ def sample_yes_no_claims_from_chunks(
     die Pipeline intern separat auf.
     """
 
-    # 1) Sätze aus den Chunks extrahieren (identische Logik wie im Extractor)
+    # Schritt 1: Sätze aus den Chunks extrahieren (identische Logik wie im Extractor)
     sentences: List[str] = sentences_from_chunks(chunks, language="english")
     if not sentences:
         return []
 
-    # 2) Pipeline lokal aufbauen
+    # Schritt 2: Pipeline lokal aufbauen
     pipe, pos_label, neg_label = _build_pipeline(
         model_name=model_name,
         max_length=max_length,
     )
 
-    # 3) Wahrscheinlichkeiten p_yes, p_no bestimmen
+    # Schritt 3: Wahrscheinlichkeiten p_yes, p_no bestimmen
     probs: List[Tuple[float, float]] = _predict_probs(
         sentences,
         pipe,
@@ -216,7 +213,7 @@ def sample_yes_no_claims_from_chunks(
         neg_label,
     )
 
-    # 4) YES/NO-Labels vergeben, aber nichts filtern
+    # Schritt 4: YES/NO-Labels vergeben, aber nichts filtern
     claims: List[Claim] = []
     for s, (p_yes, p_no) in zip(sentences, probs):
         label = "YES" if p_yes >= threshold_yes else "NO"
@@ -229,14 +226,14 @@ def sample_yes_no_claims_from_chunks(
             )
         )
 
-    # 5) Zufällige Stichprobe von n_samples ziehen
+    # Schritt 5: Zufällige Stichprobe von n_samples ziehen
     if not claims:
         return []
 
     n = min(n_samples, len(claims))
     sample: List[Claim] = random.sample(claims, n)
 
-    # 6) Optionale Konsolenausgabe
+    # Schritt 6: Konsolenausgabe
     print("\n=== Zufällige Stichprobe aus YES- und NO-Claims ===")
     for i, c in enumerate(sample, start=1):
         print(f"[{i:02d}] ({c.label}) p_yes={c.p_yes:.3f}, p_no={c.p_no:.3f}")

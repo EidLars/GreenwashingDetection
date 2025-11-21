@@ -1,4 +1,4 @@
-"""Utility for extracting KPIs with the OpenRouter API."""
+"""Extrahiert finanzielle KPIs mithilfe der OpenRouter-API."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List
 
 import re
 import time
@@ -25,16 +24,16 @@ from src import prompts
 
 LOGGER = logging.getLogger(__name__)
 
-try:  # pragma: no cover - optional dependency
+try:
     from dotenv import load_dotenv
-except ImportError:  # pragma: no cover - optional dependency
+except ImportError:
     load_dotenv = None
 
 _ENV_LOADED = False
 
 
 def _ensure_env_loaded() -> None:
-    """Load environment variables from the project .env file once."""
+    """Lädt die Umgebungsvariablen aus der projektweiten .env-Datei einmalig."""
 
     global _ENV_LOADED
     if _ENV_LOADED:
@@ -54,18 +53,18 @@ def _ensure_env_loaded() -> None:
 
 @dataclass
 class FinancialKPI:
-    """Structured container for extracted financial metrics."""
+    """Strukturierter Container für extrahierte Finanzkennzahlen."""
 
     kpi: str
     value: str
     unit: str
     context: str
-    kategorie: str | None = None       # NEU: KPI-Kategorie aus dem LLM
+    kategorie: str | None = None       # Kategorie laut LLM-Ausgabe
     reportingyear: str | None = None   # Jahr des Ursprungsberichts (wird außerhalb gesetzt)
 
 
 class OpenRouterClient:
-    """Minimal client for calling the OpenRouter chat completions API."""
+    """Client für Aufrufe der OpenRouter-Chat-Completions-API."""
 
     def __init__(self) -> None:
         _ensure_env_loaded()
@@ -89,7 +88,7 @@ class OpenRouterClient:
         return headers
 
     def complete(self, messages: List[dict]) -> str:
-        """Send a chat completion request and return the text response."""
+        """Sendet eine Chat-Completion-Anfrage und liefert die Textantwort zurück."""
 
         try:
             completion = self.client.chat.completions.create(
@@ -114,17 +113,17 @@ class OpenRouterClient:
             raise RuntimeError("Antwort von OpenRouter unvollständig") from exc
 
 
-# Sinnvolle Defaults für OpenRouter Free-Tier (aus Logs ersichtlich)
-REQS_PER_MIN_DEFAULT = 16      # X-RateLimit-Limit: 16/min
-SAFETY_MARGIN = 0.90           # etwas unter Limit bleiben
-MIN_SLEEP_BETWEEN_REQ = 4.2    # ~ 60/14 ≈ 4.2s (unter 16/min bleiben)
+# Sinnvolle Defaults für das OpenRouter-Free-Tier
+REQS_PER_MIN_DEFAULT = 16      # Dokumentiertes X-RateLimit-Limit pro Minute
+SAFETY_MARGIN = 0.90           # Puffer, um unterhalb des Limits zu bleiben
+MIN_SLEEP_BETWEEN_REQ = 4.2    # Zeitabstand, um effektiv unter 16 Requests/min zu bleiben
 
-# Anzahl Chunks pro Batch: konservativ halten (Free-Modelle)
+# Anzahl Chunks pro Batch
 BATCH_SIZE = 8
 
 
 def _strip_code_fences(s: str) -> str:
-    """Entfernt Markdown-Code-Fences und leading labels (```json ... ```)."""
+    """Entfernt Markdown-Code-Fences und führende Labels (```json ... ```)."""
     s = re.sub(r"^```(?:json)?\s*", "", s.strip(), flags=re.IGNORECASE)
     s = re.sub(r"\s*```$", "", s.strip())
     return s.strip()
@@ -142,7 +141,7 @@ def _extract_json_fragment(s: str) -> Optional[str]:
     if start == -1 or end == -1 or end <= start:
         return None
     fragment = s[start : end + 1]
-    # Versuch, triviale JSON-Fehler zu entschärfen: trailing-Kommas entfernen
+    # Entfernt offensichtlich fehlerhafte trailing-Kommas
     fragment = re.sub(r",\s*([}\]])", r"\1", fragment)
     return fragment
 
@@ -165,7 +164,7 @@ def _parse_json_lenient(raw: str) -> Optional[list]:
             return json.loads(frag)
         except json.JSONDecodeError:
             repaired = frag
-            # naive Reparatur: fehlende geschweifte/eckige Klammern ergänzen
+            # Ergänzt fehlende Klammern als Reparatur
             if repaired.count("{") > repaired.count("}"):
                 repaired += "}" * (repaired.count("{") - repaired.count("}"))
             if repaired.count("[") > repaired.count("]"):
@@ -211,7 +210,7 @@ def _complete_with_retries(client: OpenRouterClient, messages: List[dict],
             return client.complete(messages)
         except RuntimeError as exc:
             msg = str(exc)
-            # 429 → Backoff
+            # 429, Backoff
             if "429" in msg or "rate limit" in msg.lower():
                 wait = min(30.0, (2 ** attempt) + random.uniform(0, 1.0))
                 LOGGER.warning("Rate-Limit (%s). Warte %.1fs (Versuch %d/%d).",
@@ -225,7 +224,7 @@ def _complete_with_retries(client: OpenRouterClient, messages: List[dict],
                                msg, wait, attempt, max_retries)
                 time.sleep(wait)
                 continue
-            # andere Fehler → sofort weiterreichen
+            # andere Fehler, sofort weiterreichen
             raise
     raise RuntimeError("Maximale Retry-Versuche erreicht")
 
@@ -261,7 +260,7 @@ def extract_financial_kpis(chunks: Iterable[str]) -> List[FinancialKPI]:
     n = len(chunk_list)
     LOGGER.info("Starte KPI-Extraktion für %d vorgefilterte Textabschnitte", n)
 
-    # Falls nach Filterung keine Chunks übrig bleiben, können wir direkt abbrechen
+    # Frühzeitiger Ausstieg, falls nach dem Vorfilter nichts übrig bleibt
     if n == 0:
         LOGGER.info("Keine Chunks mit numerischen Inhalten gefunden – keine KPI-Extraktion durchgeführt.")
         return all_kpis
@@ -292,7 +291,7 @@ def extract_financial_kpis(chunks: Iterable[str]) -> List[FinancialKPI]:
             },
         ]
 
-        # pro-Minuten-Limit respektieren (vor Anfrage)
+        # Vor dem Request das pro-Minuten-Limit berücksichtigen
         _respect_minute_budget(last_call_ts, per_min_limit=REQS_PER_MIN_DEFAULT)
 
         try:
@@ -307,8 +306,7 @@ def extract_financial_kpis(chunks: Iterable[str]) -> List[FinancialKPI]:
                            i, raw_response[:600])
             continue
 
-        # Normalisierung & Sammeln
-        # Normalisierung & Sammeln
+        # Normalisierung und Sammeln der Ergebnisse
         for entry in parsed:
             k = (entry.get("kpi", "") or "").strip()
             v = (str(entry.get("wert", "")) or "").strip()

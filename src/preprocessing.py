@@ -1,4 +1,4 @@
-"""Utilities for loading, cleaning and chunking report texts."""
+"""Werkzeuge zum Laden, Säubern und Segmentieren von Berichtstexten."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ from typing import Iterable, List
 
 import pdfplumber
 import re
-from typing import List
 import nltk
 from nltk.tokenize import sent_tokenize
 
@@ -16,15 +15,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 def extract_text_from_pdfs(pdf_paths: Iterable[Path]) -> str:
-    """Extract text from a collection of PDF files.
-
-    Parameters
-    ----------
-    pdf_paths:
-        Collection of paths pointing to PDF documents. The function ignores
-        missing files gracefully while logging a warning. Extracted text is
-        concatenated in the order the paths are provided.
-    """
+    """Extrahiert Text aus einer Sammlung von PDF-Dateien."""
 
     texts: List[str] = []
     for path in pdf_paths:
@@ -39,7 +30,7 @@ def extract_text_from_pdfs(pdf_paths: Iterable[Path]) -> str:
     return "\n".join(texts)
 
 def clean_text(text: str) -> str:
-    """Perform enhanced cleaning to ease downstream processing.
+    """Führt eine erweiterte Reinigung durch, um die Weiterverarbeitung zu erleichtern.
 
     - Normalisiert Leerzeichen
     - Entfernt typische Bullet-/Icon-Symbole (z.B. , •)
@@ -49,14 +40,14 @@ def clean_text(text: str) -> str:
     if not text:
         return ""
 
-    # 1) Grundnormalisierung: NBSP -> Space
+    # Schritt 1: Grundnormalisierung: NBSP -> Space
     cleaned = text.replace("\u00a0", " ")
 
-    # 2) Typische Bullet-/Icon-Symbole entfernen
+    # Schritt 2: Typische Bullet-/Icon-Symbole entfernen
     #    (Liste bei Bedarf erweitern, je nach PDFs)
     cleaned = re.sub(r"[•●■▪◦▶►▸▹]", " ", cleaned)
 
-    # 3) Zeilenbasis: Trim + leere Zeilen entfernen
+    # Schritt 3: Zeilenbasis: Trim + leere Zeilen entfernen
     lines = [line.strip() for line in cleaned.splitlines() if line.strip()]
 
     merged_lines = []
@@ -89,7 +80,7 @@ def clean_text(text: str) -> str:
     if buffer:
         merged_lines.append(buffer)
 
-    # 4) Finale Normalisierung der Whitespaces
+    # Schritt 4: Finale Normalisierung der Whitespaces
     cleaned = "\n".join(merged_lines)
     cleaned = re.sub(r"\s+", " ", cleaned)
     cleaned = "\n".join(line.strip() for line in cleaned.split("\n") if line.strip())
@@ -98,19 +89,7 @@ def clean_text(text: str) -> str:
 
 
 def chunk_text(text: str, *, chunk_size: int = 512, overlap: int = 50) -> List[str]:
-    """Split text into slightly overlapping segments.
-
-    Parameters
-    ----------
-    text:
-        Cleaned input text.
-    chunk_size:
-        Maximum length of a chunk measured in tokens approximated by number of
-        words. The heuristic keeps the implementation lightweight while still
-        being practical for prototyping.
-    overlap:
-        Number of words shared between neighbouring chunks to maintain context.
-    """
+    """Teilt Text in leicht überlappende Segmente auf."""
 
     if not text:
         return []
@@ -143,13 +122,13 @@ def sentences_from_chunks(chunks: List[str], language: str = "english") -> List[
     return sents
 
 def load_and_prepare_report(report_path: Path) -> List[str]:
-    """Load, clean and chunk a single PDF report."""
+    """Lädt einen PDF-Bericht, reinigt ihn und erstellt Textsegmente."""
 
     return chunk_text(clean_text(extract_text_from_pdfs([report_path])))
 
 
 def load_and_prepare_reports(report_dir: Path) -> List[str]:
-    """Load all PDF files from a directory and return prepared chunks."""
+    """Lädt alle PDF-Dateien aus einem Verzeichnis und liefert vorbereitete Segmente."""
 
     pdf_paths = sorted(report_dir.glob("*.pdf"))
     raw_text = extract_text_from_pdfs(pdf_paths)
