@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
-
+import random
 import sys
 
 from tqdm import tqdm
@@ -180,3 +180,67 @@ class ClimateBERTClaimExtractor:
             if p_yes >= self.threshold_yes:
                 claims.append(Claim(sentence=s, p_yes=float(p_yes), p_no=float(p_no), label=label))
         return claims
+def sample_yes_no_claims_from_chunks(
+    chunks: List[str],
+    model_name: str = "climatebert/environmental-claims",
+    max_length: int = 512,
+    threshold_yes: float = 0.8,
+    n_samples: int = 10,
+) -> List[Claim]:
+    """
+    Führt auf Basis von Text-Chunks eine Claim-Klassifikation durch, erzeugt
+    sowohl YES- als auch NO-Claims und gibt anschließend eine zufällige
+    Stichprobe von n_samples Claims zurück.
+
+    Diese Funktion greift NICHT in die bestehende Pipeline ein und
+    verwendet NICHT ClimateBERTClaimExtractor.extract(), sondern baut
+    die Pipeline intern separat auf.
+    """
+
+    # 1) Sätze aus den Chunks extrahieren (identische Logik wie im Extractor)
+    sentences: List[str] = sentences_from_chunks(chunks, language="english")
+    if not sentences:
+        return []
+
+    # 2) Pipeline lokal aufbauen
+    pipe, pos_label, neg_label = _build_pipeline(
+        model_name=model_name,
+        max_length=max_length,
+    )
+
+    # 3) Wahrscheinlichkeiten p_yes, p_no bestimmen
+    probs: List[Tuple[float, float]] = _predict_probs(
+        sentences,
+        pipe,
+        pos_label,
+        neg_label,
+    )
+
+    # 4) YES/NO-Labels vergeben, aber nichts filtern
+    claims: List[Claim] = []
+    for s, (p_yes, p_no) in zip(sentences, probs):
+        label = "YES" if p_yes >= threshold_yes else "NO"
+        claims.append(
+            Claim(
+                sentence=s,
+                p_yes=float(p_yes),
+                p_no=float(p_no),
+                label=label,
+            )
+        )
+
+    # 5) Zufällige Stichprobe von n_samples ziehen
+    if not claims:
+        return []
+
+    n = min(n_samples, len(claims))
+    sample: List[Claim] = random.sample(claims, n)
+
+    # 6) Optionale Konsolenausgabe
+    print("\n=== Zufällige Stichprobe aus YES- und NO-Claims ===")
+    for i, c in enumerate(sample, start=1):
+        print(f"[{i:02d}] ({c.label}) p_yes={c.p_yes:.3f}, p_no={c.p_no:.3f}")
+        print(f"      {c.sentence}")
+        print("-" * 80)
+
+    return sample

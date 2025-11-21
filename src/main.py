@@ -14,7 +14,6 @@ import re
 from src.claims_extraction import Claim, ClimateBERTClaimExtractor
 from src.kpi_extraction import FinancialKPI, extract_financial_kpis
 from src.preprocessing import load_and_prepare_report
-from src.claims_extraction import Claim
 from src.claims_clustering import ClaimEmbedder, ClaimClusterer
 from src.claim_topics import assign_topics_to_clusters
 from src.claims_kpis_matching import save_batches_for_claim_file
@@ -57,7 +56,7 @@ def _load_saved_claims(claims_output_dir: Path) -> Dict[str, List[object]]:
                     text=entry["sentence"].strip(),
                     p_yes=entry.get("p_yes"),
                     p_no=entry.get("p_no"),
-                    label=entry.get("label")
+                    label=entry.get("label"),
                 )
             )
 
@@ -112,6 +111,7 @@ def _extract_reporting_year_from_path(report_path: Path) -> str | None:
         return m.group(1)
     return None
 
+
 def run_matching_batches(
     input_dir: Path | None = None,
     return_result: bool = False,
@@ -156,7 +156,7 @@ def run_matching_batches(
     matching_output_dir = output_root / "matching"
     matching_output_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1) Claims und KPIs laden (wie in quick_test_evaluation)
+    # 1) Claims und KPIs laden
     claims_per_report = _load_saved_claims(claims_output_dir)
     kpis_per_report = _load_saved_kpis(kpi_output_dir)
 
@@ -165,11 +165,11 @@ def run_matching_batches(
     if not kpis_per_report:
         LOGGER.warning("Keine gespeicherten KPIs gefunden unter %s", kpi_output_dir)
 
-    # Firmenpräfix-Logik (company_key) wie in run_pipeline / quick_test_evaluation
+    # Firmenpräfix-Logik (company_key)
     _TOKENS = [
         "annual", "sustainability", "csr", "esg",
         "report", "bericht", "nachhaltigkeitsbericht", "geschaeftsbericht",
-        "integrated", "statement", "iar"
+        "integrated", "statement", "iar", "non-financial", "financial"
     ]
     _YEAR_RE = re.compile(r"\b(19\d{2}|20\d{2})\b")
 
@@ -205,10 +205,9 @@ def run_matching_batches(
         key = re.sub(r"\s+", " ", key)
         kpis_by_key.setdefault(key, {})[k_stem] = k_entries
 
-    # Embedder einmalig initialisieren und an matching.save_batches_for_claim_file weitergeben
+    # Embedder einmalig initialisieren und an save_batches_for_claim_file weitergeben
     embedder = ClaimEmbedder(
         model_name="sentence-transformers/all-MiniLM-L6-v2"
-        # ggf. anderes Modell, z. B. ClimateBERT-Encoder
     )
 
     summary: Dict[str, object] = {
@@ -260,15 +259,16 @@ def run_matching_batches(
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return None
 
+
 def run_pipeline(input_dir: Path, steps: Iterable[str] | None = None) -> Dict[str, object]:
     """Run the selected pipeline steps for the given input directory.
 
     Unterstützte Schritte:
-      - "claims":    Claim-Extraktion aus Nachhaltigkeitsberichten
-      - "kpis":      KPI-Extraktion aus Geschäftsberichten
-      - "matching":  Matching & Batch-Bildung (Claims-Cluster + KPI-Subset → Matching-JSONs)
-      - "evaluation":LLM-basierte Evaluation der Matching-Batches
-      - "all":       alle obigen Schritte in der Reihenfolge
+      - "claims":     Claim-Extraktion aus Nachhaltigkeitsberichten
+      - "kpis":       KPI-Extraktion aus Geschäftsberichten
+      - "matching":   Matching & Batch-Bildung (Claims-Cluster + KPI-Subset → Matching-JSONs)
+      - "evaluation": LLM-basierte Evaluation der Matching-Batches
+      - "all":        alle obigen Schritte in der Reihenfolge
     """
 
     # -------------------------------------------------------------
@@ -357,7 +357,6 @@ def run_pipeline(input_dir: Path, steps: Iterable[str] | None = None) -> Dict[st
     matching_summary: Dict[str, object] | None = None
     if "matching" in selected_steps or "evaluation" in selected_steps:
         LOGGER.info("Starte Matching-Schritt in der Pipeline")
-        # nutzt gespeicherte Claims/KPIs aus claims_output_dir / kpi_output_dir
         matching_summary = run_matching_batches(input_dir=input_dir, return_result=True)
 
     # -------------------------------------------------------------
@@ -430,39 +429,48 @@ def run_pipeline(input_dir: Path, steps: Iterable[str] | None = None) -> Dict[st
 
 
 def parse_args() -> argparse.Namespace:
+    """
+    Parsed alle Kommandozeilenparameter für die Greenwashing-Pipeline.
+
+    Verfügbare Modi:
+      --steps <claims|kpis|matching|evaluation|all>
+        Generische Steuerung der Pipeline-Schritte. Mehrere Werte sind möglich,
+        z.B.:
+          --steps claims kpis
+          --steps kpis matching evaluation
+          --steps all   (Voreinstellung, entspricht der vollständigen Pipeline)
+    """
+
     parser = argparse.ArgumentParser(description=__doc__)
+
+    # Eingabeverzeichnis
     parser.add_argument(
         "--input-dir",
         type=Path,
         default=Path(__file__).resolve().parents[1] / "data" / "input",
-        help="Ordner mit den PDF-Berichten",
+        help="Pfad zum Eingabeverzeichnis mit PDF-Berichten.",
     )
+
+    # Generisches Steps-Interface
     parser.add_argument(
         "--steps",
         nargs="+",
         choices=["claims", "kpis", "matching", "evaluation", "all"],
         default=["all"],
         help=(
-            "Welche Teile der Pipeline ausgeführt werden sollen. "
-            "Standard ist 'all' für die komplette Verarbeitung."
+            "Auszuführende Pipeline-Schritte. "
+            "Standard: 'all' für die vollständige Pipeline."
         ),
     )
-    parser.add_argument(
-        "--only-claims",
-        action="store_true",
-        help="Nur die Claim-Extraktion ausführen (überschreibt --steps).",
-    )
-    parser.add_argument(
-        "--only-kpis",
-        action="store_true",
-        help="Nur die KPI-Extraktion ausführen (überschreibt --steps).",
-    )
+
+    # Optionaler Ausgabeort
     parser.add_argument(
         "--output",
         type=Path,
         default=None,
-        help="Optionaler Pfad für die JSON-Ausgabe",
+        help="Optionaler Pfad zur Speicherung der Pipeline-Ausgabe im JSON-Format.",
     )
+
     return parser.parse_args()
 
 
@@ -485,7 +493,6 @@ def quick_test_claims(
     result = run_pipeline(chosen_input, steps=["claims"])
     if return_result:
         return result
-    # Standard: kompaktes Pretty-Print zur unmittelbaren Sichtkontrolle
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
@@ -510,39 +517,13 @@ def quick_test_kpis(
         return result
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
+
 def quick_test_evaluation(
     input_dir: Path | None = None,
     return_result: bool = False,
 ) -> Dict[str, object] | None:
     """
     Führt *nur* die Evaluation programmatisch aus, ohne CLI.
-
-    Ablauf:
-    1. Lädt Claims und KPIs aus data/output/claims bzw. data/output/kpis
-       (oder erzeugt sie, falls 'claims'/'kpis' noch nicht gerechnet wurden,
-       wenn du run_pipeline mit anderen Steps aufrufst).
-    2. Führt das Matching durch (Claims-Cluster + KPI-Subset) und erzeugt
-       Matching-Dateien unter data/output/matching.
-    3. Liest jede Matching-Datei ein und wertet alle Batches mit dem LLM aus.
-    4. Speichert pro Matching-Datei eine Evaluations-JSON mit folgendem Header:
-       {
-         "company_key": ...,
-         "claims_file": ...,
-         "kpi_files": [...],
-         "results": [
-           {
-             "claim": "...",
-             "kpis": ["<KPI-String 1>", "..."],
-             "relation": "stutzt|widerspricht|kein_beleg",
-             "rationale": "..."
-           },
-           ...
-         ]
-       }
-
-    Beispielaufruf (IDE/Notebook):
-        from path.to.cli_module import quick_test_evaluation
-        quick_test_evaluation()
     """
     chosen_input = (
         input_dir
@@ -550,16 +531,13 @@ def quick_test_evaluation(
         else Path(__file__).resolve().parents[1] / "data" / "input"
     )
     LOGGER.info("Starte QUICK TEST: nur Evaluation (ohne CLI) für %s", chosen_input)
-
-    # Wichtig: Nur 'evaluation' ausführen – Claims/KPIs werden aus JSON geladen,
-    # Matching & Evaluation laufen batch-basiert auf den Matching-Dateien.
     result = run_pipeline(chosen_input, steps=["evaluation"])
 
     if return_result:
         return result
 
-    # Kompaktes Pretty-Print zur unmittelbaren Sichtkontrolle
     print(json.dumps(result, ensure_ascii=False, indent=2))
+
 
 def quick_test_claims_clustering(
     claims_output_dir: Path | None = None,
@@ -568,25 +546,8 @@ def quick_test_claims_clustering(
 ) -> Dict[str, object] | None:
     """
     Führt *nur* das Claim-Clustering (inkl. Topic-Zuordnung) programmatisch aus.
-
-    Erwartet, dass Claims bereits als JSON unter data/output/claims vorliegen,
-    wie sie in run_pipeline() geschrieben werden.
-
-    Beispielaufruf (IDE/Notebook):
-        from path.to.cli_module import quick_test_claims_clustering
-        quick_test_claims_clustering()
-
-    Parameter
-    ---------
-    claims_output_dir : Optional[Path]
-        Ordner mit den gespeicherten Claim-JSONs. Standard: data/output/claims.
-    n_clusters : int
-        Zielanzahl der Cluster pro Report (wird auf <= Anzahl Claims gekappt).
-    return_result : bool
-        Wenn True, wird das Ergebnis als Dict zurückgegeben, sonst nur ausgegeben.
     """
 
-    # Standardpfad verwenden, falls nichts angegeben
     if claims_output_dir is None:
         claims_output_dir = (
             Path(__file__).resolve().parents[1] / "data" / "output" / "claims"
@@ -609,8 +570,6 @@ def quick_test_claims_clustering(
         entries: List[Claim] = []
         for entry in data:
             try:
-                # Erwartet Struktur wie von run_pipeline geschrieben:
-                # {"sentence": "...", "p_yes": ..., "p_no": ..., "label": "..."}
                 entries.append(Claim(**entry))
             except TypeError as exc:
                 LOGGER.warning(
@@ -629,10 +588,9 @@ def quick_test_claims_clustering(
         LOGGER.warning("Keine Claims-JSONs gefunden – Abbruch.")
         return None
 
-    # 2) Embedder einmal initialisieren (für alle Reports wiederverwenden)
+    # 2) Embedder einmal initialisieren
     embedder = ClaimEmbedder(
         model_name="sentence-transformers/all-MiniLM-L6-v2"
-        # ggf. hier ein ClimateBERT-Encoder-Modell eintragen
     )
 
     results: Dict[str, object] = {}
@@ -641,7 +599,6 @@ def quick_test_claims_clustering(
     for stem, claims in claims_per_report.items():
         LOGGER.info("Clustere Claims für Report '%s' (%d Claims)", stem, len(claims))
 
-        # Falls weniger Claims als gewünschte Clusterzahl: Limit anpassen
         eff_n_clusters = min(n_clusters, len(claims))
         if eff_n_clusters <= 0:
             LOGGER.warning("Report '%s' hat keine Claims – übersprungen.", stem)
@@ -654,10 +611,8 @@ def quick_test_claims_clustering(
         )
         clusters = clusterer.cluster_claims(claims)
 
-        # Themen-Tags zuweisen
         assign_topics_to_clusters(clusters, top_n=3)
 
-        # Kurze Textausgabe zur visuellen Kontrolle
         print("=" * 120)
         print(f"REPORT: {stem}")
         print(f"Anzahl Claims:   {len(claims)}")
@@ -669,11 +624,10 @@ def quick_test_claims_clustering(
                 f"Cluster {cl.cluster_id}: "
                 f"{len(cl.claims)} Claims, Topics: {cl.claim_topics}"
             )
-            for c in cl.claims[:3]:  # nur ein paar Beispiel-Claims anzeigen
+            for c in cl.claims[:3]:
                 print(f"  - {c.sentence}")
             print("-" * 80)
 
-        # Kompakte Ergebnisstruktur für weitere Nutzung
         results[stem] = {
             "num_claims": len(claims),
             "num_clusters": len(clusters),
@@ -690,10 +644,10 @@ def quick_test_claims_clustering(
     if return_result:
         return results
 
-    # Standard: kompaktes JSON der Clusterstatistik ausgeben
     print("\n\n=== Zusammenfassung Claim-Clustering (pro Report) ===")
     print(json.dumps(results, ensure_ascii=False, indent=2))
     return None
+
 
 def quick_test_matching(
     input_dir: Path | None = None,
@@ -702,16 +656,44 @@ def quick_test_matching(
     """
     Führt *nur* das Matching (Claims-Cluster + KPI-Subset) programmatisch aus,
     ohne CLI und ohne LLM-Call.
-
-    Erwartet, dass Claims und KPIs bereits als JSON unter data/output/claims
-    bzw. data/output/kpis vorliegen (siehe _load_saved_claims / _load_saved_kpis).
-
-    Beispielaufruf (IDE/Notebook):
-        from path.to.cli_module import quick_test_matching
-        quick_test_matching()
     """
     return run_matching_batches(input_dir=input_dir, return_result=return_result)
 
+def random_claims_for_evaluation():
+    """
+            Lädt einen festen PDF-Bericht, extrahiert Chunks,
+            klassifiziert alle Sätze (YES/NO) und gibt 10 zufällige Claims aus.
+            """
+    from src.preprocessing import load_and_prepare_report
+    from src.claims_extraction import sample_yes_no_claims_from_chunks
+
+    # Fester Pfad innerhalb deines Projekts
+    pdf_path = Path(__file__).resolve().parents[
+                   1] / "data" / "input" / "nachhaltigkeitsberichte" / "nestle-non-financial-statement-2024.pdf"
+
+    print(f"Nutze PDF: {pdf_path}")
+
+    # Text vorbereiten
+    chunks = load_and_prepare_report(pdf_path)
+
+    # YES+NO Claims, 10 zufällig
+    claims = sample_yes_no_claims_from_chunks(chunks, n_samples=10)
+
+def main() -> None:
+    args = parse_args()
+    steps = args.steps
+
+    result = run_pipeline(args.input_dir, steps=steps)
+
+    if args.output:
+        args.output.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    else:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
-    quick_test_evaluation()
+    main()
